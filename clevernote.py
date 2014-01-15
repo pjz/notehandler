@@ -1,11 +1,13 @@
 import sys
 import json
+import time
 import os.path
 import urllib2
 import functools
 
 from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
+import evernote.edam.notestore.ttypes as NoteTypes
 
 CLEVERNOTE_CONSUMER_KEY = ''
 CLEVERNOTE_CONSUMER_SECRET = ''
@@ -106,7 +108,7 @@ def get_notebooks():
     return get_client().get_note_store().listNotebooks()
 
 
-def get_current_notebook():
+def get_current_notebook_name():
     load_config()
     if 'cur_notebook' not in config:
         cur = [ n.name for n in get_notebooks() if n.defaultNotebook ]
@@ -114,13 +116,15 @@ def get_current_notebook():
         save_config()
     return config['cur_notebook']
 
+def get_current_notebook():
+    return [n for n in get_notebooks() if n.name == get_current_notebook_name()][0] 
 
 def ask_yn(prompt):
     result = raw_input(prompt)
     return result.lower() in [ 'y', 'yes' ]
 
 
-def set_current_notebook(name):
+def set_current_notebook_name(name):
     load_config()
     if name not in [ n.name for n in get_notebooks() ]:
         if not ask_yn("Notebook '%s' doesn't exist. Create it?" % name):
@@ -143,7 +147,7 @@ def cmd_notebooks(args):
     print("Notebooks:")
     for n in get_notebooks():
         print("  %s%s%s" % ( 'D' if n.defaultNotebook else ' '
-                           , '+' if n.name == get_current_notebook() else ' '
+                           , '+' if n.name == get_current_notebook_name() else ' '
                            , n.name))
 
 
@@ -155,13 +159,46 @@ def cmd_notebook(args):
     if len(args) > 0:
         name = args[0]
         if name.startswith('+'): name = name[1:]
-        set_current_notebook(name)
+        set_current_notebook_name(name)
 
-    print("Current notebook set to '%s'." % get_current_notebook())
-
-
+    print("Current notebook set to '%s'." % get_current_notebook_name())
 
 
+def cmd_notes(args, offset=0, count=100):
+    """notes [+notebook] [:tag1 [:tag2] ...] [--offset=X] [--count=Y] - 
+    list notes in the specified notebook, or the current one if not specified. 
+    """
+
+    tags = []
+    for arg in args:
+        if arg.startswith('+'):
+            set_current_notebook_name(arg[1:])
+        if arg.startswith(':'):
+            tags.append(arg[1:])
+
+    nb_guid = get_current_notebook().guid 
+
+    nf = NoteTypes.NoteFilter( notebookGuid=nb_guid )
+    nb_tags = get_client().get_note_store().listTagsByNotebook( nb_guid )
+    if tags:
+        nf.tagGuids = [ t.guid for t in nb_tags if t.name in tags ]
+
+    resultspec = NoteTypes.NotesMetadataResultSpec()
+    for field in ['includeTitle', 'includeUpdated', 'includeTagGuids']:
+        setattr(resultspec, field, True)
+             
+    notesml = get_client().get_note_store().findNotesMetadata(nf, int(offset), int(count), resultspec)
+
+    #print("Notes in notebook '%s': " % get_current_notebook_name())
+
+    for note in notesml.notes:
+        tagdisplay = [ "[%s]" % t.name for t in nb_tags if t.guid in note.tagGuids ]
+        updatedisplay = time.strftime("%m/%d", time.localtime(note.updated / 1000))
+        print("  %s %s %s %s" % (note.guid, updatedisplay, tagdisplay, note.title))
+
+    remaining = notesml.totalNotes - notesml.startIndex - len(notesml.notes)
+    if remaining > 0:
+        print("...and %d more." % remaining)
 
 
 def cmd_userinfo(args):
