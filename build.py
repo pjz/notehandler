@@ -8,7 +8,7 @@ from subprocess import check_output
 # Core Executables
 # ================
 
-name = 'clevernote'
+name = 'notehandler'
 
 RUN_DEPS = [ 'cmdpy', 'evernote' ]
 

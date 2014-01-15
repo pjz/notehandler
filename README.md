@@ -1,12 +1,10 @@
 
-ClEvernote - Commandline Evernote
-=================================
+NoteHandler - Commandline Evernote
+==================================
 
 An Evernote CLI in python.
 
-'cn' is the command:
-
-cn login/logout - acquire and destroy oauth tokens
+'nh' is the command:
 
 cn add [[:<tag1>] [:<tag2>] ...]
        [+<notebook>] 
@@ -20,11 +18,18 @@ cn add [[:<tag1>] [:<tag2>] ...]
        adding the specified files as resources to that note (or none if unspecified)
         
        
-cn notebooks - list existing notebooks. 
-                 Your default notebook is marked with a 'D'.
-                 Your (clevernote-only) current notebook is marked with a '+'
+nh login - Log in to Evernote; you'll be prompted for username and password
 
-cn notebook [+<notebook>] - if notebook is specified, set the current notebook,
-                               creating it if necessary. Otherwise, just show
-                               the current notebook.
+nh logout - Nuke your persistent Evernote credentials.
+
+nh notebook [+<notebook>] - if notebook is specified, set the current notebook,
+    creating it if necessary. Otherwise, just show the current notebook.
+
+nh notebooks - List existing notebooks.
+    The (evernote) default notebook is marked with a 'D'.
+    The (local-only) current notebook is marked with a '+'
+
+nh notes [+notebook] [:tag1 [:tag2] ...] [--offset=X] [--count=Y] -
+    list notes in the specified notebook, or the current one if not specified.
+
 

@@ -9,11 +9,11 @@ from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
 import evernote.edam.notestore.ttypes as NoteTypes
 
-CLEVERNOTE_CONSUMER_KEY = ''
-CLEVERNOTE_CONSUMER_SECRET = ''
-CLEVERNOTE_CALLBACK_URL = ''
+NOTEHANDLER_CONSUMER_KEY = ''
+NOTEHANDLER_CONSUMER_SECRET = ''
+NOTEHANDLER_CALLBACK_URL = ''
 
-CONFIG_FILENAME = os.path.expanduser('.cnrc')
+CONFIG_FILENAME = os.path.expanduser('~/.nhrc')
 
 config = None
 
@@ -62,11 +62,11 @@ def cmd_login(args):
         access_token = config['access_token']
     else:
         client = EvernoteClient(
-            consumer_key=CLEVERNOTE_CONSUMER_KEY,
-            consumer_secret=CLEVERNOTE_CONSUMER_SECRET,
+            consumer_key=NOTEHANDLER_CONSUMER_KEY,
+            consumer_secret=NOTEHANDLER_CONSUMER_SECRET,
             sandbox=True # Default: True
             )
-        request_token = client.get_request_token(CLEVERNOTE_CALLBACK_URL)
+        request_token = client.get_request_token(NOTEHANDLER_CALLBACK_URL)
         request_url = client.get_authorize_url(request_token)
         verifier_json = json.loads(urllib2.urlopen(request_url).read())
         access_token = client.get_access_token(
@@ -215,5 +215,5 @@ def cmd_userinfo(args):
 
 def main():
     from cmdpy import CmdfileClient
-    CmdfileClient(cmdmodule='clevernote').execute(sys.argv[1:])
+    CmdfileClient(cmdmodule='notehandler').execute(sys.argv[1:])
 

@@ -1,7 +1,7 @@
 from distribute_setup import use_setuptools
 use_setuptools()
 
-from setuptools import find_packages, setup
+from setuptools import setup
 version = open('version.txt').read()
 
 
@@ -25,12 +25,11 @@ classifiers = [ 'Development Status :: 4 - Beta'
 setup( author = 'Paul Jimenez'
      , author_email = 'pj@place.org'
      , classifiers = classifiers
-     , description = 'ClEvernote is a Commandline Interface for Evernote'
-     , entry_points = {'console_scripts': [ 'clevernote = clevernote:main'
-                                           ]}
-     , name = 'clevernote'
-     , py_modules = [ 'distribute_setup', 'clevernote' ]
-     , url = 'http://github.com/pjz/clevernote'
+     , description = 'NoteHandler is a Commandline Interface for Evernote'
+     , entry_points = {'console_scripts': [ 'nh = notehandler:main' ]}
+     , name = 'notehandler'
+     , py_modules = [ 'distribute_setup', 'notehandler' ]
+     , url = 'http://github.com/pjz/notehandler'
      , version = version
      , zip_safe = False
      , install_requires = [ 'evernote', 'cmdpy' ]
