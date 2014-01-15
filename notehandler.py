@@ -2,8 +2,9 @@ import sys
 import json
 import time
 import os.path
-import urllib2
+import hashlib
 import functools
+import mimetypes
 
 from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
@@ -61,22 +62,16 @@ def cmd_login(args):
     elif 'access_token' in config:
         access_token = config['access_token']
     else:
-        client = EvernoteClient(
-            consumer_key=NOTEHANDLER_CONSUMER_KEY,
-            consumer_secret=NOTEHANDLER_CONSUMER_SECRET,
-            sandbox=True # Default: True
-            )
-        request_token = client.get_request_token(NOTEHANDLER_CALLBACK_URL)
-        request_url = client.get_authorize_url(request_token)
-        verifier_json = json.loads(urllib2.urlopen(request_url).read())
-        access_token = client.get_access_token(
-             request_token['oauth_token'],
-             request_token['oauth_token_secret'],
-             #request.GET.get('oauth_verifier', '')
-             verifier_json['oauth_verifier']
-             )
-        client = EvernoteClient(token=access_token)
-        config['access_token'] = access_token
+        if not ask_yn("Do you have a Dev token?"):
+            print("Dev token is currently required.  See http://dev.evernote.com/doc/articles/authentication.php")
+            sys.exit(1)
+        access_token = raw_input("Enter it now:")
+        config['dev_token'] = access_token
+        save_config()
+
+    sandbox = config.get('sandbox', 'false').lower() != 'false'
+    EvernoteClient(token=access_token, sandbox=sandbox)
+    config['access_token'] = access_token
     print("Logged in.")
 
 
@@ -100,18 +95,27 @@ def get_client():
     else:
         print("You need to log in first.")
         sys.exit(1)
-    return EvernoteClient(token=access_token)
+    sandbox = config.get('sandbox', 'false').lower() != 'false'
+    return EvernoteClient(token=access_token, sandbox=sandbox)
 
 
-@memoize
+def get_note_store():
+    return get_client().get_note_store()
+
+
 def get_notebooks():
-    return get_client().get_note_store().listNotebooks()
+    return get_note_store().listNotebooks()
 
 
 def get_current_notebook_name():
     load_config()
+    if 'cur_notebook' in config:
+        if not config['cur_notebook'] in [ n.name for n in get_notebooks() ]:
+            del config['cur_notebook']
     if 'cur_notebook' not in config:
         cur = [ n.name for n in get_notebooks() if n.defaultNotebook ]
+        if len(cur) < 1:
+            cur = get_notebooks()[0].name
         config['cur_notebook'] = cur[0]
         save_config()
     return config['cur_notebook']
@@ -132,8 +136,7 @@ def set_current_notebook_name(name):
             sys.exit(1)
         notebook = Types.Notebook()
         notebook.name = name
-        note_store = get_client().get_note_store()
-        notebook = note_store.createNotebook(notebook)
+        notebook = get_note_store().createNotebook(notebook)
     config['cur_notebook'] = name
     save_config()
 
@@ -164,8 +167,8 @@ def cmd_notebook(args):
     print("Current notebook set to '%s'." % get_current_notebook_name())
 
 
-def cmd_notes(args, offset=0, count=100):
-    """notes [+notebook] [:tag1 [:tag2] ...] [--offset=X] [--count=Y] - 
+def cmd_notes(args, offset=0, count=10):
+    """notes [+notebook] [[:tag1 [:tag2] ...] [--offset=X] [--count=Y] - 
     list notes in the specified notebook, or the current one if not specified. 
     """
 
@@ -179,7 +182,7 @@ def cmd_notes(args, offset=0, count=100):
     nb_guid = get_current_notebook().guid 
 
     nf = NoteTypes.NoteFilter( notebookGuid=nb_guid )
-    nb_tags = get_client().get_note_store().listTagsByNotebook( nb_guid )
+    nb_tags = get_note_store().listTagsByNotebook( nb_guid ) or []
     if tags:
         nf.tagGuids = [ t.guid for t in nb_tags if t.name in tags ]
 
@@ -187,18 +190,82 @@ def cmd_notes(args, offset=0, count=100):
     for field in ['includeTitle', 'includeUpdated', 'includeTagGuids']:
         setattr(resultspec, field, True)
              
-    notesml = get_client().get_note_store().findNotesMetadata(nf, int(offset), int(count), resultspec)
+    notesml = get_note_store().findNotesMetadata(nf, int(offset), int(count), resultspec)
 
     #print("Notes in notebook '%s': " % get_current_notebook_name())
 
     for note in notesml.notes:
-        tagdisplay = [ "[%s]" % t.name for t in nb_tags if t.guid in note.tagGuids ]
+        notetags = note.tagGuids or []
+        tagdisplay = [ "[%s]" % t.name for t in nb_tags if t.guid in notetags ]
         updatedisplay = time.strftime("%m/%d", time.localtime(note.updated / 1000))
         print("  %s %s %s %s" % (note.guid, updatedisplay, tagdisplay, note.title))
 
     remaining = notesml.totalNotes - notesml.startIndex - len(notesml.notes)
     if remaining > 0:
         print("...and %d more." % remaining)
+
+def cmd_add(args):
+    """add [[:tag1] [:tag2] ...]
+       [+<notebook>] 
+       <title> 
+       [resource1] [resource2] ..
+       < <content>
+    add a new note 
+       with the specified tags (or none if unspecified)
+       in the specified notebook (or your current notebook if unspecified)
+       with the specified title (required)
+       adding the specified files as resources to that note (or none if unspecified)
+       and content from stdin
+    """
+
+    # Parse args
+    tags = []
+    title = None 
+    resource_names = []
+    for arg in args:
+        if arg.startswith('+'):
+            set_current_notebook_name(arg[1:])
+        elif arg.startswith(':'):
+            tags.append(arg[1:])
+        elif title is None:
+            title = arg
+        else:
+            resource_names.append(arg)
+
+    if title is None:
+        print("A title must be specified.")
+        raise SyntaxError
+
+    print("making note titled '%s' with tags'%s' and resources named '%s'" % (title, repr(tags), repr(resource_names)))
+
+    nb_guid = get_current_notebook().guid
+
+    resources = []
+    attachments = ""
+    if resource_names is not None:
+        for filename in resource_names:
+            resource = Types.Resource()
+            resource.data = Types.Data()
+            resource.data.body = open(filename,'r').read()
+            resource.attributes = Types.ResourceAttributes(fileName=filename,attachment=False)
+            mime = mimetypes.guess_type(filename)[0]
+            resource.mime = mime or ''
+            hash = hashlib.md5()
+            hash.update(resource.data.body)
+            attachments += '<en-media type="%s" hash="%s" />\n' % (resource.mime, hash.hexdigest())
+            resources.append(resource)
+
+    content = wrap_content(sys.stdin.read() + attachments)
+
+    note = Types.Note(title=title, content=content, tagNames=tags, resources=resources, notebookGuid=nb_guid)
+    note = get_note_store().createNote(note) 
+
+    print("Note created!")
+
+def wrap_content(content):
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note>""" + content + "</en-note>"
 
 
 def cmd_userinfo(args):
