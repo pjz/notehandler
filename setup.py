@@ -30,7 +30,7 @@ setup( author = 'Paul Jimenez'
      , py_modules = [ 'distribute_setup', 'notehandler' ]
      , url = 'http://github.com/pjz/notehandler'
      # there must be nothing on the following line after the = other than a string constant
-     , version = '0.4'
+     , version = '0.4-dev'
      , zip_safe = False
      , install_requires = [ 'evernote', 'cmdpy' ]
       )
