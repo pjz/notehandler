@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import time
@@ -14,7 +15,7 @@ NOTEHANDLER_CONSUMER_KEY = ''
 NOTEHANDLER_CONSUMER_SECRET = ''
 NOTEHANDLER_CALLBACK_URL = ''
 
-CONFIG_FILENAME = os.path.expanduser('~/.nhrc')
+CONFIG_FILENAME = os.environ.get('NHRC', os.path.expanduser('~/.nhrc'))
 
 config = None
 
@@ -147,6 +148,7 @@ def cmd_notebooks(args):
     The (local-only) current notebook is marked with a '+'
     """
 
+    get_client()
     print("Notebooks:")
     for n in get_notebooks():
         print("  %s%s%s" % ( 'D' if n.defaultNotebook else ' '

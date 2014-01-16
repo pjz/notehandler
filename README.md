@@ -2,11 +2,14 @@
 NoteHandler - Commandline Evernote
 ==================================
 
-An Evernote CLI in python.
+An Evernote CLI in python.  
+
+State (including your dev key) is stored in the file pointed at
+by the NHRC environment variable, or ~/.nhrc if no value is set.
 
 'nh' is the command:
 
-cn add [[:<tag1>] [:<tag2>] ...]
+nh add [[:<tag1>] [:<tag2>] ...]
        [+<notebook>] 
        <title> 
        [resource1] [resource2] ..
@@ -16,7 +19,6 @@ cn add [[:<tag1>] [:<tag2>] ...]
        in the specified notebook (or your current notebook if unspecified)
        with the specified title (required)
        adding the specified files as resources to that note (or none if unspecified)
-        
        
 nh login - Log in to Evernote; you'll be prompted for username and password
 
