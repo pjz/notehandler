@@ -1,6 +1,7 @@
 import os
 import sys
 import os.path
+import fileinput
 from optparse import make_option
 from fabricate import main, run, shell, autoclean
 from subprocess import check_output
@@ -82,6 +83,13 @@ def _require_y(prompt, failmsg=''):
         print failmsg
         sys.exit(1)
 
+def _set_version(newversion):
+    needle = 'version ='
+    for line in fileinput.input(['setup.py'], inplace=True): 
+        if needle in line:
+            i = line.find(needle)
+            line = line[:i] + needle + " " + repr(newversion) + "\n"
+        print line,
 
 def release():
     if main.options.release is None:
@@ -90,20 +98,19 @@ def release():
 
     rel = main.options.release
 
-   
     if rel in check_output(['git', 'tag', '-l'],universal_newlines=True).split('\n'):
         print("Version %s is already git tagged." % rel)
         sys.exit(1)
 
     _require_y("Release version %s ?" % rel)
 
-    open("version.txt", "w").write(rel)
+    _set_version(rel)
     run(main.options.python, 'setup.py', 'sdist', '--formats=zip,gztar,bztar', 'upload')
     run(main.options.python, 'setup.py', 'bdist_wheel', 'upload')
-    shell('git', 'commit', 'version.txt', '-m', 'Release %s' % rel, silent=False) 
+    shell('git', 'commit', 'setup.py', '-m', 'Release %s' % rel, silent=False) 
     shell('git', 'tag', rel, silent=False)
-    open("version.txt", "a").write('-dev')
-    shell('git', 'commit', 'version.txt', '-m', 'Bump to %s-dev' % rel, silent=False) 
+    _set_version(rel + '-dev')
+    shell('git', 'commit', 'setup.py', '-m', 'Bump to %s-dev' % rel, silent=False) 
     shell('git', 'push', silent=False)
     shell('git', 'push', '--tags', silent=False)
     clean_build()

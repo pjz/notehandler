@@ -2,7 +2,6 @@ from distribute_setup import use_setuptools
 use_setuptools()
 
 from setuptools import setup
-version = open('version.txt').read()
 
 
 classifiers = [ 'Development Status :: 4 - Beta'
@@ -30,7 +29,8 @@ setup( author = 'Paul Jimenez'
      , name = 'notehandler'
      , py_modules = [ 'distribute_setup', 'notehandler' ]
      , url = 'http://github.com/pjz/notehandler'
-     , version = version
+     # there must be nothing on the following line after the = other than a string constant
+     , version = '0.2-dev'
      , zip_safe = False
      , install_requires = [ 'evernote', 'cmdpy' ]
       )
