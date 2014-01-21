@@ -10,6 +10,7 @@ import mimetypes
 from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
 import evernote.edam.notestore.ttypes as NoteTypes
+import evernote.edam.error.ttypes as Errors
 
 NOTEHANDLER_CONSUMER_KEY = ''
 NOTEHANDLER_CONSUMER_SECRET = ''
@@ -101,7 +102,18 @@ def get_client():
 
 
 def get_note_store():
-    return get_client().get_note_store()
+    global GLOBALS
+    done = False
+    while not done:
+        try:
+            return get_client().get_note_store()
+        except Errors.EDAMSystemException, e:
+            if not GLOBALS['wait']:
+                raise e
+            if e.errorCode == Errors.EDAMErrorCode.RATE_LIMIT_REACHED:
+                 towait = e.rateLimitDuration + 1
+                 print "Rate limit reached; waiting the suggested %d seconds..." % towait
+                 time.sleep(towait)
 
 
 def get_notebooks():
@@ -280,9 +292,24 @@ def cmd_userinfo(args):
         value = str(getattr(user, field, ''))
         print("%s: %s" % (field.capitalize(), value))
 
+GLOBALS = { 'wait': True }
 
+
+def _handle_globals(args):
+    global GLOBALS
+    newargs = []
+    for arg in args:
+        if arg.lower() == '--wait':
+            GLOBALS['wait'] = True             
+        elif arg.lower() == '--no-wait':            
+            GLOBALS['wait'] = False
+        else:
+            newargs.append(arg)
+    return newargs
 
 def main():
     from cmdpy import CmdfileClient
-    CmdfileClient(cmdmodule='notehandler').execute(sys.argv[1:])
+    args = _handle_globals(sys.argv[1:]) 
+    CmdfileClient(cmdmodule='notehandler').execute(args)
+
 
