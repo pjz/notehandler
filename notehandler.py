@@ -6,6 +6,7 @@ import os.path
 import hashlib
 import functools
 import mimetypes
+import traceback
 
 from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
@@ -272,9 +273,18 @@ def cmd_add(args):
     content = wrap_content(sys.stdin.read() + attachments)
 
     note = Types.Note(title=title, content=content, tagNames=tags, resources=resources, notebookGuid=nb_guid)
-    note = get_note_store().createNote(note) 
+    note = _retry(lambda: get_note_store().createNote(note))
 
     print("Note created!")
+
+def _retry(f,n=3):
+    for tries in range(n):
+        return f()
+    except:
+        print("Problem: %s \n Retrying..." % traceback.format_exc())
+        pass
+    print("Failed! Exiting!")
+    sys.exit(1)
 
 def wrap_content(content):
     return """<?xml version="1.0" encoding="UTF-8"?>
