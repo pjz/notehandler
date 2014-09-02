@@ -1,3 +1,6 @@
+
+from __future__ import print_function
+
 import os
 import sys
 import json
@@ -7,6 +10,7 @@ import hashlib
 import functools
 import mimetypes
 import traceback
+
 
 from evernote.api.client import EvernoteClient
 import evernote.edam.type.ttypes as Types
@@ -42,6 +46,17 @@ def save_config():
              , indent=4
              , separators=(',', ': ')
              )
+
+
+def debug_stderr(f):
+    sys.stderr.write(f())
+
+
+def debug_noop(*args,**kwargs):
+    pass
+
+
+debug = debug_noop
 
 
 def memoize(obj):
@@ -80,9 +95,10 @@ def cmd_login(args):
 
 def cmd_logout(args):
     """logout - Nuke your persistent Evernote credentials."""
-    
+
     load_config()
     if 'access_token' in config:
+        debug(lambda: "Nuking access token %s" % config['access_token'])
         del config['access_token']
         save_config()
     print("Logged out.")
@@ -109,12 +125,12 @@ def get_note_store():
         try:
             return get_client().get_note_store()
         except Errors.EDAMSystemException, e:
-            if not GLOBALS['wait']:
-                raise e
-            if e.errorCode == Errors.EDAMErrorCode.RATE_LIMIT_REACHED:
+            if GLOBALS['wait'] and e.errorCode == Errors.EDAMErrorCode.RATE_LIMIT_REACHED:
                  towait = e.rateLimitDuration + 1
-                 print "Rate limit reached; waiting the suggested %d seconds..." % towait
+                 print("Rate limit reached; waiting the suggested %d seconds..." % towait)
                  time.sleep(towait)
+            else:
+                raise e
 
 
 def get_notebooks():
@@ -135,7 +151,7 @@ def get_current_notebook_name():
     return config['cur_notebook']
 
 def get_current_notebook():
-    return [n for n in get_notebooks() if n.name == get_current_notebook_name()][0] 
+    return [n for n in get_notebooks() if n.name == get_current_notebook_name()][0]
 
 def ask_yn(prompt):
     result = raw_input(prompt)
@@ -156,7 +172,7 @@ def set_current_notebook_name(name):
 
 
 def cmd_notebooks(args):
-    """notebooks - List existing notebooks. 
+    """notebooks - List existing notebooks.
     The (evernote) default notebook is marked with a 'D'.
     The (local-only) current notebook is marked with a '+'
     """
@@ -173,7 +189,7 @@ def cmd_notebook(args):
     """notebook [+<notebook>] - if notebook is specified, set the current notebook,
     creating it if necessary. Otherwise, just show the current notebook.
     """
-     
+
     if len(args) > 0:
         name = args[0]
         if name.startswith('+'): name = name[1:]
@@ -183,8 +199,8 @@ def cmd_notebook(args):
 
 
 def cmd_notes(args, offset=0, count=10):
-    """notes [+notebook] [[:tag1 [:tag2] ...] [--offset=X] [--count=Y] - 
-    list notes in the specified notebook, or the current one if not specified. 
+    """notes [+notebook] [[:tag1 [:tag2] ...] [--offset=X] [--count=Y] -
+    list notes in the specified notebook, or the current one if not specified.
     """
 
     tags = []
@@ -194,7 +210,7 @@ def cmd_notes(args, offset=0, count=10):
         if arg.startswith(':'):
             tags.append(arg[1:])
 
-    nb_guid = get_current_notebook().guid 
+    nb_guid = get_current_notebook().guid
 
     nf = NoteTypes.NoteFilter( notebookGuid=nb_guid )
     nb_tags = get_note_store().listTagsByNotebook( nb_guid ) or []
@@ -204,10 +220,10 @@ def cmd_notes(args, offset=0, count=10):
     resultspec = NoteTypes.NotesMetadataResultSpec()
     for field in ['includeTitle', 'includeUpdated', 'includeTagGuids']:
         setattr(resultspec, field, True)
-             
+
     notesml = get_note_store().findNotesMetadata(nf, int(offset), int(count), resultspec)
 
-    #print("Notes in notebook '%s': " % get_current_notebook_name())
+    debug(lambda: "Notes in notebook '%s': " % get_current_notebook_name())
 
     for note in notesml.notes:
         notetags = note.tagGuids or []
@@ -221,11 +237,11 @@ def cmd_notes(args, offset=0, count=10):
 
 def cmd_add(args):
     """add [[:tag1] [:tag2] ...]
-       [+<notebook>] 
-       <title> 
+       [+<notebook>]
+       <title>
        [resource1] [resource2] ..
        < <content>
-    add a new note 
+    add a new note
        with the specified tags (or none if unspecified)
        in the specified notebook (or your current notebook if unspecified)
        with the specified title (required)
@@ -235,7 +251,7 @@ def cmd_add(args):
 
     # Parse args
     tags = []
-    title = None 
+    title = None
     resource_names = []
     for arg in args:
         if arg.startswith('+'):
@@ -257,18 +273,17 @@ def cmd_add(args):
 
     resources = []
     attachments = ""
-    if resource_names is not None:
-        for filename in resource_names:
-            resource = Types.Resource()
-            resource.data = Types.Data()
-            resource.data.body = open(filename,'r').read()
-            resource.attributes = Types.ResourceAttributes(fileName=filename,attachment=False)
-            mime = mimetypes.guess_type(filename)[0]
-            resource.mime = mime or ''
-            hash = hashlib.md5()
-            hash.update(resource.data.body)
-            attachments += '<en-media type="%s" hash="%s" />\n' % (resource.mime, hash.hexdigest())
-            resources.append(resource)
+    for filename in resource_names:
+        resource = Types.Resource()
+        resource.data = Types.Data()
+        resource.data.body = open(filename,'r').read()
+        resource.attributes = Types.ResourceAttributes(fileName=filename,attachment=False)
+        mime = mimetypes.guess_type(filename)[0]
+        resource.mime = mime or ''
+        hash = hashlib.md5()
+        hash.update(resource.data.body)
+        attachments += '<en-media type="%s" hash="%s" />\n' % (resource.mime, hash.hexdigest())
+        resources.append(resource)
 
     content = wrap_content(sys.stdin.read() + attachments)
 
@@ -279,10 +294,11 @@ def cmd_add(args):
 
 def _retry(f,n=3):
     for tries in range(n):
-        return f()
-    except:
-        print("Problem: %s \n Retrying..." % traceback.format_exc())
-        pass
+        try:
+            return f()
+        except:
+            print("Problem: %s \n Retrying..." % traceback.format_exc())
+            pass
     print("Failed! Exiting!")
     sys.exit(1)
 
@@ -310,16 +326,15 @@ def _handle_globals(args):
     newargs = []
     for arg in args:
         if arg.lower() == '--wait':
-            GLOBALS['wait'] = True             
-        elif arg.lower() == '--no-wait':            
+            GLOBALS['wait'] = True
+        elif arg.lower() == '--no-wait':
             GLOBALS['wait'] = False
         else:
             newargs.append(arg)
     return newargs
 
+
 def main():
     from cmdpy import CmdfileClient
-    args = _handle_globals(sys.argv[1:]) 
+    args = _handle_globals(sys.argv[1:])
     CmdfileClient(cmdmodule='notehandler').execute(args)
-
-
