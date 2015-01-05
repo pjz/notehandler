@@ -235,6 +235,23 @@ def cmd_notes(args, offset=0, count=10):
     if remaining > 0:
         print("...and %d more." % remaining)
 
+
+def cmd_show(args):
+    """show <guid> [[guid1] [guid2] ...] - show the specified note(s) (in ENML)
+    """
+    if not len(args) > 0:
+        raise SyntaxError
+
+    ns = get_note_store()
+    withContent=True
+    withResourcesData=False
+    withResourcesRecognition=False
+    withResourcesAlternateData=False
+    for guid in args:
+        note = ns.getNote(guid, withContent, withResourcesData, withResourcesRecognition, withResourcesAlternateData)
+        print("Title: %s\n\n%s\n" % (note.title, note.content))
+
+
 def cmd_add(args):
     """add [[:tag1] [:tag2] ...]
        [+<notebook>]
